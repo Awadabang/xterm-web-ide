@@ -1,19 +1,19 @@
 /// <reference types='@gitpod/gitpod-protocol/lib/typings/globals'/>
 
-import type { IDEFrontendState } from "@gitpod/gitpod-protocol/lib/ide-frontend-service";
+// import type { IDEFrontendState } from "@gitpod/gitpod-protocol/lib/ide-frontend-service";
 
 import type ReconnectingWebSocket from "reconnecting-websocket";
-import fetchBuilder from "fetch-retry";
+// import fetchBuilder from "fetch-retry";
 import type { Terminal, ITerminalOptions, ITerminalAddon } from "@xterm/xterm";
 
 import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
 
-import { resizeRemoteTerminal } from "./lib/remote";
+// import { resizeRemoteTerminal } from "./lib/remote";
 import { IXtermWindow } from "./lib/types";
 import { webLinksHandler } from "./lib/addons";
 import { isWindows } from "./lib/helpers";
-import { initiateRemoteCommunicationChannelSocket } from "./lib/remote";
+// import { initiateRemoteCommunicationChannelSocket } from "./lib/remote";
 
 import { Emitter } from "@gitpod/gitpod-protocol/lib/util/event";
 import { DisposableCollection } from "@gitpod/gitpod-protocol/lib/util/disposable";
@@ -21,32 +21,32 @@ import debounce from "lodash/debounce";
 import { type UUID } from "node:crypto";
 
 const onDidChangeState = new Emitter<void>();
-let state: IDEFrontendState = "initializing" as IDEFrontendState;
+// let state: IDEFrontendState = "initializing" as IDEFrontendState;
 
 const maxReconnectionRetries = 50;
 
-const fetchOptions = {
-    retries: maxReconnectionRetries,
-    retryDelay: (attempt: number, _error: Error | null, _response: Response | null) => {
-        return Math.pow(1.25, attempt) * 200;
-    },
-    retryOn: (attempt: number, error: Error | null, response: Response | null) => {
-        if (error !== null || (response?.status ?? 0) >= 400) {
-            console.log(`retrying, attempt number ${attempt + 1}, ${(Math.pow(1.25, attempt) * 300) / 1000}`);
-            return true;
-        } else {
-            console.warn("Not retrying");
-            return false;
-        }
-    },
-};
+// const fetchOptions = {
+//     retries: maxReconnectionRetries,
+//     retryDelay: (attempt: number, _error: Error | null, _response: Response | null) => {
+//         return Math.pow(1.25, attempt) * 200;
+//     },
+//     retryOn: (attempt: number, error: Error | null, response: Response | null) => {
+//         if (error !== null || (response?.status ?? 0) >= 400) {
+//             console.log(`retrying, attempt number ${attempt + 1}, ${(Math.pow(1.25, attempt) * 300) / 1000}`);
+//             return true;
+//         } else {
+//             console.warn("Not retrying");
+//             return false;
+//         }
+//     },
+// };
 
 declare let window: IXtermWindow;
 
 let term: Terminal;
 let protocol: string;
 let socketURL: string;
-let pid: number;
+// let pid: number;
 window.handledMessages = [];
 
 const defaultFonts = ["JetBrains Mono", "Fira Code", "courier-new", "courier", "monospace"];
@@ -91,32 +91,43 @@ async function initAddons(term: Terminal): Promise<void> {
     term.unicode.activeVersion = "11";
 }
 
+async function initiateRemoteTerminalSize(terminal: Terminal): Promise<void | ReconnectingWebSocket> {
+    if (!terminal) {
+        console.warn("Terminal not yet initialized. Aborting resize.");
+        return;
+    }
+    console.log("initiateRemoteTerminalSize")
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    fitAddon.fit();
+}
+
 async function initiateRemoteTerminal(terminal: Terminal): Promise<void | ReconnectingWebSocket> {
-    updateTerminalSize(terminal);
+    initiateRemoteTerminalSize(terminal)
 
     const ReconnectingWebSocket = (await import("reconnecting-websocket")).default;
 
-    const fetcher = fetchBuilder(fetch, fetchOptions);
-    const initialTerminalResizeRequest = await fetcher(`/terminals?cols=${term.cols}&rows=${term.rows}`, {
-        method: "POST",
-        credentials: "include",
-    });
+    // const fetcher = fetchBuilder(fetch, fetchOptions);
+    // const initialTerminalResizeRequest = await fetcher(`/terminals?cols=${term.cols}&rows=${term.rows}`, {
+    //     method: "POST",
+    //     credentials: "include",
+    // });
 
-    if (!initialTerminalResizeRequest.ok) {
-        output("Could not setup IDE. Retry?", {
-            formActions: [reloadButton],
-            reason: "error",
-        });
-        return;
-    }
+    // if (!initialTerminalResizeRequest.ok) {
+    //     output("Could not setup IDE. Retry?", {
+    //         formActions: [reloadButton],
+    //         reason: "error",
+    //     });
+    //     return;
+    // }
 
-    const serverProcessId = await initialTerminalResizeRequest.text();
-    console.debug(`Got PID from server: ${serverProcessId}`);
+    // const serverProcessId = await initialTerminalResizeRequest.text();
+    console.debug(`Get environmentId: 123`);
 
-    pid = parseInt(serverProcessId);
-    socketURL += serverProcessId;
+    // pid = parseInt(serverProcessId);
+    socketURL += "123";
 
-    await initiateRemoteCommunicationChannelSocket(protocol);
+    // await initiateRemoteCommunicationChannelSocket(protocol);
 
     const socket = new ReconnectingWebSocket(socketURL, [], webSocketSettings);
     socket.onopen = async () => {
@@ -186,15 +197,15 @@ async function createTerminal(
 
     window.terminal = term;
     term.onResize(async (size) => {
-        await resizeRemoteTerminal(size, pid);
         console.info(`Resized remote terminal to ${size.cols}x${size.rows}`);
+        // updateTerminalSize(socket, size);
     });
 
     protocol = location.protocol === "https:" ? "wss://" : "ws://";
-    socketURL = `${protocol + location.hostname + (location.port ? ":" + location.port : "")}/terminals/`;
+    socketURL = `${protocol}192.168.248.129:3032/terminals/`;
 
     term.open(element);
-    updateTerminalSize(term);
+    initiateRemoteTerminalSize(term)
     term.focus();
 
     const terminalSocket = await initiateRemoteTerminal(term);
@@ -202,7 +213,7 @@ async function createTerminal(
         throw new Error("Couldn't set up a remote connection to the terminal process");
     }
 
-    const debouncedUpdateTerminalSize = debounce(() => updateTerminalSize(term), 200, { trailing: true });
+    const debouncedUpdateTerminalSize = debounce(() => initiateRemoteTerminalSize(term), 200, { trailing: true });
     window.onresize = () => debouncedUpdateTerminalSize();
 
     // Register the onclick event for the reconnect button
@@ -312,50 +323,49 @@ async function runRealTerminal(terminal: Terminal, socket: WebSocket): Promise<v
     terminal.loadAddon(attachAddon);
     await initAddons(term);
 
-    state = "ready";
+    // state = "ready";
     onDidChangeState.fire();
 }
 
-function updateTerminalSize(terminal: Terminal): void {
-    if (!terminal) {
-        console.warn("Terminal not yet initialized. Aborting resize.");
-        return;
-    }
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    fitAddon.fit();
-}
+// function updateTerminalSize(socket: ReconnectingWebSocket, size: { cols: number, rows: number }): void {
+//     socket.send(JSON.stringify({"cols":size.cols, "rows": size.rows}))
+// }
 
-window.gitpod.ideService = {
-    get state() {
-        return state;
-    },
-    get failureCause() {
-        return undefined;
-    },
-    onDidChange: onDidChangeState.event,
-    start: () => {
-        const toDispose = new DisposableCollection();
+const toDispose = new DisposableCollection();
+const terminalContainer = document.getElementById("terminal-container");
+
+if (terminalContainer && !terminalContainer.classList.contains("init")) {
+    createTerminal(terminalContainer, toDispose).then(({ socket }) => {
+        terminalContainer.classList.add("init");
         toDispose.push({
             dispose: () => {
-                state = "terminated";
-                onDidChangeState.fire();
+                socket.close();
+                for (const id of outputStack) {
+                    closeModal(id);
+                }
             },
         });
-        const terminalContainer = document.getElementById("terminal-container");
-        if (terminalContainer && !terminalContainer.classList.contains("init")) {
-            createTerminal(terminalContainer, toDispose).then(({ socket }) => {
-                terminalContainer.classList.add("init");
-                toDispose.push({
-                    dispose: () => {
-                        socket.close();
-                        for (const id of outputStack) {
-                            closeModal(id);
-                        }
-                    },
-                });
-            });
-        }
-        return toDispose;
-    },
-};
+    });
+}
+
+// window.gitpod.ideService = {
+//     get state() {
+//         return state;
+//     },
+//     get failureCause() {
+//         return undefined;
+//     },
+//     onDidChange: onDidChangeState.event,
+//     start: () => {
+//         console.log("Start!!!")
+//         const toDispose = new DisposableCollection();
+//         createTerminal
+//         // toDispose.push({
+//         //     dispose: () => {
+//         //         state = "terminated";
+//         //         onDidChangeState.fire();
+//         //     },
+//         // });
+//         return toDispose;
+//     },
+// };

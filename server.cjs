@@ -10,7 +10,7 @@ const rateLimit = require("express-rate-limit").default;
 const WebSocket = require("ws");
 const argv = require("minimist")(process.argv.slice(2), { boolean: ["openExternal"] });
 
-const { getOpenablePorts } = require("./out/supervisor-helper.cjs");
+// const { getOpenablePorts } = require("./out/supervisor-helper.cjs");
 const { PortsStatus } = require("@gitpod/supervisor-api-grpc/lib/status_pb");
 const { EventEmitter } = require("events");
 
@@ -160,34 +160,34 @@ function startServer() {
             ws.send(JSON.stringify(msg));
         });
 
-        async function sendPortUpdates() {
-            for await (const ports of getOpenablePorts()) {
-                for (const port of ports) {
-                    if (!port.exposed || !port.exposed.url) {
-                        continue;
-                    }
-                    const id = crypto.randomUUID();
-                    if (port.onOpen === PortsStatus.OnOpenAction.NOTIFY) {
-                        ws.send(
-                            JSON.stringify({
-                                action: "notifyAboutUrl",
-                                data: { url: port.exposed.url, port: port.localPort, name: port.name },
-                                id,
-                            }),
-                        );
-                    } else {
-                        ws.send(JSON.stringify({ action: "openUrl", data: port.exposed.url, id }));
-                    }
-                }
-            }
-        }
+        // async function sendPortUpdates() {
+        //     for await (const ports of getOpenablePorts()) {
+        //         for (const port of ports) {
+        //             if (!port.exposed || !port.exposed.url) {
+        //                 continue;
+        //             }
+        //             const id = crypto.randomUUID();
+        //             if (port.onOpen === PortsStatus.OnOpenAction.NOTIFY) {
+        //                 ws.send(
+        //                     JSON.stringify({
+        //                         action: "notifyAboutUrl",
+        //                         data: { url: port.exposed.url, port: port.localPort, name: port.name },
+        //                         id,
+        //                     }),
+        //                 );
+        //             } else {
+        //                 ws.send(JSON.stringify({ action: "openUrl", data: port.exposed.url, id }));
+        //             }
+        //         }
+        //     }
+        // }
 
         async function init() {
             if (process.env["XTERM_CONFIRM_BROWSER_EXIT"] === "true") {
                 ws.send(JSON.stringify({ action: "confirmExit" }));
             }
 
-            sendPortUpdates();
+            // sendPortUpdates();
         }
 
         init();
