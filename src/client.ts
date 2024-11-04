@@ -3,13 +3,13 @@
 // import type { IDEFrontendState } from "@gitpod/gitpod-protocol/lib/ide-frontend-service";
 
 import type ReconnectingWebSocket from "reconnecting-websocket";
-// import fetchBuilder from "fetch-retry";
+import fetchBuilder from "fetch-retry";
 import type { Terminal, ITerminalOptions, ITerminalAddon } from "@xterm/xterm";
 
 import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
 
-// import { resizeRemoteTerminal } from "./lib/remote";
+import { resizeRemoteTerminal } from "./lib/remote";
 import { IXtermWindow } from "./lib/types";
 import { webLinksHandler } from "./lib/addons";
 import { isWindows } from "./lib/helpers";
@@ -25,27 +25,27 @@ const onDidChangeState = new Emitter<void>();
 
 const maxReconnectionRetries = 50;
 
-// const fetchOptions = {
-//     retries: maxReconnectionRetries,
-//     retryDelay: (attempt: number, _error: Error | null, _response: Response | null) => {
-//         return Math.pow(1.25, attempt) * 200;
-//     },
-//     retryOn: (attempt: number, error: Error | null, response: Response | null) => {
-//         if (error !== null || (response?.status ?? 0) >= 400) {
-//             console.log(`retrying, attempt number ${attempt + 1}, ${(Math.pow(1.25, attempt) * 300) / 1000}`);
-//             return true;
-//         } else {
-//             console.warn("Not retrying");
-//             return false;
-//         }
-//     },
-// };
+const fetchOptions = {
+    retries: maxReconnectionRetries,
+    retryDelay: (attempt: number, _error: Error | null, _response: Response | null) => {
+        return Math.pow(1.25, attempt) * 200;
+    },
+    retryOn: (attempt: number, error: Error | null, response: Response | null) => {
+        if (error !== null || (response?.status ?? 0) >= 400) {
+            console.log(`retrying, attempt number ${attempt + 1}, ${(Math.pow(1.25, attempt) * 300) / 1000}`);
+            return true;
+        } else {
+            console.warn("Not retrying");
+            return false;
+        }
+    },
+};
 
 declare let window: IXtermWindow;
 
 let term: Terminal;
-let protocol: string;
-let socketURL: string;
+let backendURL = `http://10.122.131.124:3032`;
+let socketURL = `ws://10.122.131.124:3032/spaces/123/terminals/`;
 // let pid: number;
 window.handledMessages = [];
 
@@ -91,41 +91,30 @@ async function initAddons(term: Terminal): Promise<void> {
     term.unicode.activeVersion = "11";
 }
 
-async function initiateRemoteTerminalSize(terminal: Terminal): Promise<void | ReconnectingWebSocket> {
-    if (!terminal) {
-        console.warn("Terminal not yet initialized. Aborting resize.");
-        return;
-    }
-    console.log("initiateRemoteTerminalSize")
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    fitAddon.fit();
-}
-
 async function initiateRemoteTerminal(terminal: Terminal): Promise<void | ReconnectingWebSocket> {
-    initiateRemoteTerminalSize(terminal)
+    updateTerminalSize(terminal);
 
     const ReconnectingWebSocket = (await import("reconnecting-websocket")).default;
 
-    // const fetcher = fetchBuilder(fetch, fetchOptions);
-    // const initialTerminalResizeRequest = await fetcher(`/terminals?cols=${term.cols}&rows=${term.rows}`, {
-    //     method: "POST",
-    //     credentials: "include",
-    // });
+    const fetcher = fetchBuilder(fetch, fetchOptions);
+    const initialTerminalResizeRequest = await fetcher(`${backendURL}/spaces/123/terminals?cols=${term.cols}&rows=${term.rows}`, {
+        method: "POST",
+        credentials: "include",
+    });
 
-    // if (!initialTerminalResizeRequest.ok) {
-    //     output("Could not setup IDE. Retry?", {
-    //         formActions: [reloadButton],
-    //         reason: "error",
-    //     });
-    //     return;
-    // }
+    if (!initialTerminalResizeRequest.ok) {
+        output("Could not setup IDE. Retry?", {
+            formActions: [reloadButton],
+            reason: "error",
+        });
+        return;
+    }
 
-    // const serverProcessId = await initialTerminalResizeRequest.text();
-    console.debug(`Get environmentId: 123`);
+    const serverProcessId = await initialTerminalResizeRequest.text();
+    console.debug(`Get PID: ${serverProcessId}`);
 
-    // pid = parseInt(serverProcessId);
-    socketURL += "123";
+    let pid = parseInt(serverProcessId);
+    socketURL += pid;
 
     // await initiateRemoteCommunicationChannelSocket(protocol);
 
@@ -197,15 +186,12 @@ async function createTerminal(
 
     window.terminal = term;
     term.onResize(async (size) => {
+        await resizeRemoteTerminal(size, 123);
         console.info(`Resized remote terminal to ${size.cols}x${size.rows}`);
-        // updateTerminalSize(socket, size);
     });
 
-    protocol = location.protocol === "https:" ? "wss://" : "ws://";
-    socketURL = `${protocol}192.168.248.129:3032/terminals/`;
-
     term.open(element);
-    initiateRemoteTerminalSize(term)
+    updateTerminalSize(term)
     term.focus();
 
     const terminalSocket = await initiateRemoteTerminal(term);
@@ -213,7 +199,7 @@ async function createTerminal(
         throw new Error("Couldn't set up a remote connection to the terminal process");
     }
 
-    const debouncedUpdateTerminalSize = debounce(() => initiateRemoteTerminalSize(term), 200, { trailing: true });
+    const debouncedUpdateTerminalSize = debounce(() => updateTerminalSize(term), 200, { trailing: true });
     window.onresize = () => debouncedUpdateTerminalSize();
 
     // Register the onclick event for the reconnect button
@@ -330,6 +316,15 @@ async function runRealTerminal(terminal: Terminal, socket: WebSocket): Promise<v
 // function updateTerminalSize(socket: ReconnectingWebSocket, size: { cols: number, rows: number }): void {
 //     socket.send(JSON.stringify({"cols":size.cols, "rows": size.rows}))
 // }
+function updateTerminalSize(terminal: Terminal): void {
+    if (!terminal) {
+        console.warn("Terminal not yet initialized. Aborting resize.");
+        return;
+    }
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    fitAddon.fit();
+}
 
 const toDispose = new DisposableCollection();
 const terminalContainer = document.getElementById("terminal-container");
